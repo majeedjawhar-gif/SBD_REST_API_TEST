@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SBD ScanTrack - Project Data Explorer</title>
+<link rel="icon" href="image.svg" type="image/svg+xml">
+<style>
+:root{--bg:#F4F2EC;--panel:#fff;--ink:#22303A;--muted:#6B7780;--line:#D9D5C8;--navy:#1F3A4D;--sage:#6F8B70;--khaki:#B79F5A;--ok:#4F7A5A;--err:#9A4A3F;--warn:#A9822F}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 "Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--navy);color:#EDE8D8;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header img{width:34px;height:34px}header h1{font-size:17px;margin:0;font-weight:600}
+header small{display:block;color:#B9C4CB;font-weight:400}
+.badge{margin-left:auto;padding:4px 12px;border-radius:12px;font-size:12px;background:#33505F}
+.badge.ok{background:var(--ok)}.badge.err{background:var(--err)}.badge.wait{background:var(--warn)}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0}
+h2{font-size:14px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em;color:var(--navy);border-bottom:2px solid var(--khaki);padding-bottom:6px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:#FCFBF8;color:var(--ink);min-width:0}
+input.grow,textarea{flex:1;min-width:180px}
+textarea{font-family:Consolas,monospace;font-size:12px}
+button{font:inherit;padding:6px 12px;border:1px solid var(--navy);background:var(--navy);color:#fff;border-radius:4px;cursor:pointer}
+button.sec{background:#fff;color:var(--navy)}button:disabled{opacity:.5;cursor:not-allowed}
+button.lnk{border:0;background:none;color:var(--navy);padding:0;text-decoration:underline}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tabs button{background:#fff;color:var(--navy)}.tabs button.on{background:var(--navy);color:#fff}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 10px;font-size:13px}.kv b{color:var(--muted);font-weight:500}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #EEEBE0;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+th{background:#EFEBDD;color:var(--navy);position:sticky;top:0}
+tr.clk{cursor:pointer}tr.clk:hover{background:#F7F4EA}
+.empty{color:var(--muted);padding:10px 0}
+#log{height:220px;overflow:auto;background:#1B2830;color:#DDE3E6;font:12px/1.5 Consolas,monospace;padding:8px;border-radius:4px}
+#log div{border-bottom:1px solid #2B3B45;padding:2px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.ok{color:#9CCB9F}.er{color:#E39A8F}.in{color:#9DB8C8}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+</style>
+</head>
+<body>
+<header>
+  <img src="image.svg" alt="">
+  <h1>SBD ScanTrack<small>Trimble Connect Project Data Explorer (REST API)</small></h1>
+  <span id="badge" class="badge wait">Initialising</span>
+</header>
+<main>
+<div class="two">
+<section>
+  <h2>Authentication</h2>
+  <div class="kv">
+    <b>Mode</b><span id="kMode">-</span>
+    <b>Access token</b><span id="kTok">Not available</span>
+    <b>API origin</b><span id="kOrigin">https://app.connect.trimble.com</span>
+  </div>
+  <p style="color:var(--muted);margin:10px 0 6px">Inside Trimble Connect the token is requested automatically. When opened on its own, paste a bearer token:</p>
+  <div class="bar"><input id="tokIn" class="grow" type="password" placeholder="Bearer access token"><button id="tokBtn" class="sec">Use Token</button></div>
+</section>
+<section>
+  <h2>Project</h2>
+  <div class="bar"><select id="projSel" disabled><option>Load projects first</option></select>
+  <button id="loadProj" disabled>Load Projects</button></div>
+  <div class="kv" id="pInfo"><b>Selected</b><span>None</span></div>
+</section>
+</div>
+
+<section>
+  <h2>Project Data</h2>
+  <div class="tabs" id="tabs"></div>
+  <div class="bar" id="crumb"></div>
+  <div class="bar"><input id="filter" class="grow" placeholder="Filter rows"><button id="csv" class="sec">Export CSV</button></div>
+  <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  <div class="empty" id="empty">Authenticate and select a project to begin.</div>
+</section>
+
+<section>
+  <h2>ToDo Management</h2>
+  <p style="margin:0 0 8px;color:var(--muted)">Creates a ToDo in the selected project. Use a test project, because this writes real data. Edit and delete are available on each row of the ToDos tab.</p>
+  <div class="bar">
+    <input id="tLabel" class="grow" placeholder="ToDo title (required)" maxlength="200">
+    <select id="tPri"><option>LOW</option><option selected>NORMAL</option><option>HIGH</option></select>
+    <input id="tDue" type="date" aria-label="Due date">
+  </div>
+  <div class="bar">
+    <input id="tDesc" class="grow" placeholder="Description (optional)">
+    <button id="tCreate" disabled>Create ToDo</button>
+  </div>
+  <div id="tMsg" class="empty" style="padding:0"></div>
+</section>
+
+<section>
+  <h2>Custom REST Request</h2>
+  <div class="bar">
+    <select id="rm"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+    <input id="rp" class="grow" value="/projects" placeholder="/path relative to /tc/api/2.0">
+    <button id="rgo" disabled>Send</button>
+  </div>
+  <textarea id="rb" rows="3" style="width:100%" placeholder="JSON body (POST / PUT)"></textarea>
+</section>
+
+<section>
+  <h2>Request Log</h2>
+  <div class="bar"><button class="sec" id="clr">Clear</button></div>
+  <div id="log"></div>
+</section>
+</main>
+
+<script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const MASTER="https://app.connect.trimble.com";
+const S={token:null,origin:MASTER,regions:null,projects:[],project:null,tab:"files",stack:[],rows:[],cols:[],API:null};
+
+function log(c,t){const d=document.createElement("div");d.className=c;d.textContent="["+new Date().toISOString().slice(11,23)+"] "+t;$("log").appendChild(d);$("log").scrollTop=1e9}
+function badge(c,t){$("badge").className="badge "+c;$("badge").textContent=t}
+
+/* ---------- REST helper ---------- */
+async function rest(path,opt){
+  if(!S.token)throw new Error("No access token available.");
+  opt=opt||{};const url=(opt.origin||S.origin)+"/tc/api/2.0"+path;
+  const t0=performance.now();
+  const res=await fetch(url,{method:opt.method||"GET",headers:Object.assign({Authorization:"Bearer "+S.token,Accept:"application/json"},opt.body?{"Content-Type":"application/json"}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
+  const ms=Math.round(performance.now()-t0);
+  log(res.ok?"ok":"er",(opt.method||"GET")+" "+path+" -> "+res.status+" ("+ms+" ms)");
+  const txt=await res.text();let data;try{data=txt?JSON.parse(txt):null}catch(e){data=txt}
+  if(!res.ok)throw new Error("HTTP "+res.status+(data&&data.message?": "+data.message:""));
+  return data;
+}
+
+/* ---------- Authentication ---------- */
+function setToken(t,mode){
+  S.token=t;$("kTok").textContent=t?"Available ("+t.length+" characters)":"Not available";
+  if(mode)$("kMode").textContent=mode;
+  $("loadProj").disabled=!t;$("rgo").disabled=!t;
+  if(t)badge("ok","Authenticated");
+}
+async function connectHost(){
+  const lib=window.TrimbleConnectWorkspace;
+  if(!lib||window.parent===window){$("kMode").textContent="Standalone";badge("wait","Awaiting token");log("in","Not running inside Trimble Connect. Paste a token to continue.");return}
+  $("kMode").textContent="Trimble Connect extension";badge("wait","Connecting");
+  try{
+    S.API=await lib.connect(window.parent,(ev,a)=>{
+      const d=a&&a.data!==undefined?a.data:a;
+      if(ev==="extension.accessToken"&&typeof d==="string"&&d.length>20){setToken(d);autoProject()}
+      else if(ev==="extension.accessToken")log("in","Token status: "+d);
+    },30000);
+    try{S.API.extension.setStatusMessage("SBD ScanTrack data explorer ready")}catch(e){}
+    const t=await S.API.extension.requestPermission("accesstoken");
+    if(typeof t==="string"&&t.length>20){setToken(t);autoProject()}
+    else{log("in","Access token status: "+t+". Approve the consent prompt in Trimble Connect.");badge("wait","Consent "+t)}
+  }catch(e){badge("err","Connection failed");log("er","Workspace API: "+e.message)}
+}
+async function autoProject(){
+  if(S.project||!S.API)return;
+  try{
+    const p=await S.API.project.getCurrentProject();
+    if(p&&p.id){await loadProjects(p.id)}
+  }catch(e){log("in","Current project not available: "+e.message)}
+}
+
+/* ---------- Regions & projects ---------- */
+async function getRegions(){
+  if(S.regions)return S.regions;
+  try{S.regions=await rest("/regions",{origin:MASTER})}catch(e){S.regions=[];log("er","Regions lookup failed; using master origin.")}
+  return S.regions;
+}
+async function originFor(p){
+  const regs=await getRegions();const loc=(p.location||"").toLowerCase();
+  const r=(Array.isArray(regs)?regs:[]).find(x=>String(x.location||"").toLowerCase()===loc||String(x.twoLetterCode||"").toLowerCase()===loc);
+  return r&&r.origin?r.origin.replace(/\/+$/,""):MASTER;
+}
+async function loadProjects(preselect){
+  try{
+    const list=await rest("/projects",{origin:MASTER});
+    S.projects=Array.isArray(list)?list:[];
+    const sel=$("projSel");sel.innerHTML="";
+    S.projects.forEach(p=>{const o=document.createElement("option");o.value=p.id;o.textContent=p.name;sel.appendChild(o)});
+    sel.disabled=!S.projects.length;
+    if(!S.projects.length){$("empty").textContent="No projects returned for this account.";return}
+    if(preselect)sel.value=preselect;
+    await pickProject(sel.value);
+  }catch(e){log("er","Projects: "+e.message);badge("err","Request failed")}
+}
+async function pickProject(id){
+  const p=S.projects.find(x=>x.id===id);if(!p)return;
+  S.project=p;$("tCreate").disabled=false;S.origin=await originFor(p);$("kOrigin").textContent=S.origin;
+  const rows=[["Name",p.name],["Project ID",p.id],["Location",p.location],["Root folder",p.rootId],["Created",p.createdOn],["Modified",p.modifiedOn]];
+  $("pInfo").innerHTML="";rows.forEach(([k,v])=>{const b=document.createElement("b"),s=document.createElement("span");b.textContent=k;s.textContent=v||"-";$("pInfo").append(b,s)});
+  S.stack=p.rootId?[{id:p.rootId,name:p.name}]:[];
+  showTab(S.tab);
+}
+
+/* ---------- Data tabs ---------- */
+const TABS={
+  files:{label:"Files & Folders",load:async()=>{
+    const top=S.stack[S.stack.length-1];if(!top)throw new Error("Project has no root folder ID.");
+    const items=await rest("/folders/"+top.id+"/items");
+    return {cols:["name","type","size","modifiedOn","modifiedBy"],rows:(items||[]).map(i=>({id:i.id,name:i.name,type:i.type,size:i.size,modifiedOn:i.modifiedOn,modifiedBy:i.modifiedBy&&(i.modifiedBy.email||i.modifiedBy.firstName),_t:i.type}))}}},
+  todos:{label:"ToDos",load:async()=>{
+    const r=await rest("/todos?projectId="+S.project.id);
+    return {cols:["label","status","priority","assignedTo","dueDate","createdOn"],rows:(r||[]).map(t=>({id:t.id,_t:"TODO",label:t.label||t.title,status:t.status,priority:t.priority,assignedTo:(t.assignees||[]).map(a=>a.email||a.id).join("; "),dueDate:t.dueDate,createdOn:t.createdOn}))}}},
+  users:{label:"Team Members",load:async()=>{
+    const r=await rest("/projects/"+S.project.id+"/users");
+    return {cols:["firstName","lastName","email","role","status"],rows:(r||[]).map(u=>({firstName:u.firstName,lastName:u.lastName,email:u.email,role:u.role,status:u.status}))}}},
+  views:{label:"Saved Views",load:async()=>{
+    const r=await rest("/views?projectId="+S.project.id);
+    return {cols:["name","description","createdOn","modifiedOn"],rows:(r||[]).map(v=>({name:v.name,description:v.description,createdOn:v.createdOn,modifiedOn:v.modifiedOn}))}}}
+};
+function buildTabs(){
+  const t=$("tabs");t.innerHTML="";
+  Object.keys(TABS).forEach(k=>{const b=document.createElement("button");b.textContent=TABS[k].label;b.className=k===S.tab?"on":"";b.onclick=()=>showTab(k);t.appendChild(b)});
+}
+async function showTab(k){
+  S.tab=k;buildTabs();renderCrumb();
+  if(!S.project){return}
+  $("empty").style.display="block";$("empty").textContent="Loading...";
+  try{const d=await TABS[k].load();S.cols=d.cols;S.rows=d.rows;render()}
+  catch(e){S.rows=[];S.cols=[];render();$("empty").style.display="block";$("empty").textContent="Could not load: "+e.message}
+}
+function renderCrumb(){
+  const c=$("crumb");c.innerHTML="";if(S.tab!=="files")return;
+  S.stack.forEach((f,i)=>{
+    if(i)c.append(" / ");
+    const b=document.createElement("button");b.className="lnk";b.textContent=f.name;
+    b.onclick=()=>{S.stack=S.stack.slice(0,i+1);showTab("files")};c.appendChild(b);
+  });
+}
+function render(){
+  const q=$("filter").value.toLowerCase();
+  const rows=S.rows.filter(r=>!q||S.cols.some(c=>String(r[c]==null?"":r[c]).toLowerCase().includes(q)));
+  $("thead").innerHTML="";$("tbody").innerHTML="";
+  const hr=document.createElement("tr");S.cols.forEach(c=>{const th=document.createElement("th");th.textContent=c;hr.appendChild(th)});
+  if((S.tab==="files"||S.tab==="todos")&&S.cols.length)hr.appendChild(document.createElement("th"));
+  $("thead").appendChild(hr);
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    S.cols.forEach(c=>{const td=document.createElement("td");td.textContent=r[c]==null?"":r[c];tr.appendChild(td)});
+    if(S.tab==="files"){
+      const td=document.createElement("td");
+      if(r._t==="FOLDER"){tr.className="clk";tr.onclick=()=>{S.stack.push({id:r.id,name:r.name});showTab("files")}}
+      else{const b=document.createElement("button");b.className="lnk";b.textContent="Download link";b.onclick=e=>{e.stopPropagation();dl(r)};td.appendChild(b)}
+      tr.appendChild(td);
+    }
+    if(S.tab==="todos"){
+      const td=document.createElement("td");
+      const e=document.createElement("button");e.className="lnk";e.textContent="Edit";e.onclick=()=>editTodo(r);
+      const d=document.createElement("button");d.className="lnk";d.style.marginLeft="10px";d.textContent="Delete";d.onclick=()=>delTodo(r);
+      td.append(e,d);tr.appendChild(td);
+    }
+    $("tbody").appendChild(tr);
+  });
+  $("empty").style.display=rows.length?"none":"block";
+  if(!rows.length)$("empty").textContent=S.project?"No records found.":"Authenticate and select a project to begin.";
+}
+async function dl(r){
+  try{const d=await rest("/files/fs/"+r.id+"/downloadurl");const u=d&&(d.url||d.downloadUrl);if(u)window.open(u,"_blank","noopener");else log("er","No download URL in response.")}
+  catch(e){log("er","Download link: "+e.message)}
+}
+function tmsg(c,t){const m=$("tMsg");m.textContent=t;m.style.color=c==="ok"?"var(--ok)":"var(--err)"}
+async function createTodo(){
+  const label=$("tLabel").value.trim();
+  if(!S.project){tmsg("er","Select a project first.");return}
+  if(!label){tmsg("er","A ToDo title is required.");return}
+  const body={projectId:S.project.id,label,priority:$("tPri").value};
+  const desc=$("tDesc").value.trim();if(desc)body.description=desc;
+  if($("tDue").value)body.dueDate=$("tDue").value;
+  try{
+    const r=await rest("/todos",{method:"POST",body});
+    tmsg("ok","ToDo created"+(r&&r.id?" (ID "+r.id+").":"."));
+    $("tLabel").value="";$("tDesc").value="";$("tDue").value="";
+    if(S.tab==="todos")showTab("todos");
+  }catch(e){tmsg("er","Create failed: "+e.message)}
+}
+async function editTodo(r){
+  const label=prompt("New ToDo title:",r.label||"");
+  if(label===null)return;
+  if(!label.trim()){alert("The title cannot be empty.");return}
+  try{await rest("/todos/"+r.id,{method:"PUT",body:{label:label.trim()}});tmsg("ok","ToDo updated.");showTab("todos")}
+  catch(e){tmsg("er","Update failed: "+e.message)}
+}
+async function delTodo(r){
+  if(!confirm('Delete ToDo "'+(r.label||r.id)+'"? This cannot be undone.'))return;
+  try{await rest("/todos/"+r.id,{method:"DELETE"});tmsg("ok","ToDo deleted.");showTab("todos")}
+  catch(e){tmsg("er","Delete failed: "+e.message)}
+}
+function exportCsv(){
+  if(!S.rows.length)return;
+  const esc=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+  const csv=[S.cols.map(esc).join(",")].concat(S.rows.map(r=>S.cols.map(c=>esc(r[c])).join(","))).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv"}));
+  a.download="sbd-scantrack-"+S.tab+"-"+new Date().toISOString().slice(0,10)+".csv";a.click();URL.revokeObjectURL(a.href);
+}
+
+/* ---------- Wiring ---------- */
+$("tokBtn").onclick=()=>{const t=$("tokIn").value.trim().replace(/^Bearer\s+/i,"");if(t)setToken(t,"Manual token")};
+$("loadProj").onclick=()=>loadProjects();
+$("projSel").onchange=e=>pickProject(e.target.value);
+$("tCreate").onclick=createTodo;$("filter").oninput=render;$("csv").onclick=exportCsv;$("clr").onclick=()=>{$("log").innerHTML=""};
+$("rgo").onclick=async()=>{
+  let body;const raw=$("rb").value.trim();
+  if(raw){try{body=JSON.parse(raw)}catch(e){log("er","Invalid JSON body.");return}}
+  try{const d=await rest($("rp").value.trim(),{method:$("rm").value,body});log("in",JSON.stringify(d,null,2).slice(0,3000))}
+  catch(e){log("er",e.message)}
+};
+buildTabs();connectHost();
+})();
+</script>
+</body>
+</html>

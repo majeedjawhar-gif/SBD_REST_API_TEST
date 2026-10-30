@@ -1,8 +1,0 @@
-{
-  "url": "https://majeedjawhar-gif.github.io/SBD_REST_API/explorer.html",
-  "title": "SBD ScanTrack - Project Data Explorer",
-  "icon": "https://majeedjawhar-gif.github.io/SBD_REST_API/image.svg",
-  "description": "Reads Trimble Connect project data (files, ToDos, team members, views) through the Core REST API.",
-  "configCommand": "sbd_open_config",
-  "extensionType": ["project"]
-}
